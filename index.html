@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>what we propose for it to look like</title>
+<title>trainer, what we imagine for it to look</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -20,17 +20,23 @@ button{font:inherit;background:#fff;color:#111;border:1px solid #999;padding:5px
 button:hover{background:#eee}
 button[aria-pressed="true"]{background:#111;color:#fff;border-color:#111}
 button:focus-visible{outline:2px solid #378ADD;outline-offset:2px}
+#inside{margin-top:14px;max-width:72ch}
+#inside p{margin:0 0 6px}
+#inside ol{margin:6px 0 8px;padding-left:22px}
+#inside li{margin:3px 0}
+#inside .note{color:#444;font-size:14px}
+[hidden]{display:none !important}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
 </head>
 <body>
 <main>
 <h1>what we propose for it to look like</h1>
-<h2 class="sr-only">Interactive 3D model: three laptops connect through a fault injection box to a switch. Use the buttons to choose which laptop's cable is cut.</h2>
+<h2 class="sr-only">hi im kenchi hilario</h2>
 <div id="wrap">
 <canvas id="c"></canvas>
 <div id="labels"></div>
-<p id="fallback" hidden>This 3D view needs WebGL and an internet connection to load three.js.</p>
+<p id="fallback" hidden>needs webgl and internet to work ofc. once again, hi im kenchi hilario</p>
 </div>
 <div class="controls" id="controls">
 <span>Cut cable:</span>
@@ -38,6 +44,26 @@ button:focus-visible{outline:2px solid #378ADD;outline-offset:2px}
 <button type="button" data-i="1" aria-pressed="true">Laptop 2</button>
 <button type="button" data-i="2" aria-pressed="false">Laptop 3</button>
 <button type="button" data-i="-1" aria-pressed="false">None</button>
+</div>
+<div class="controls">
+<span>View:</span>
+<button type="button" id="xray" aria-pressed="false">X-ray: show inside the box</button>
+<button type="button" id="zin">Zoom in</button>
+<button type="button" id="zout">Zoom out</button>
+</div>
+<div id="inside" hidden>
+<p>Inside the box (angas noh, [praise nyo aq dali]):</p>
+<ol>
+<li><b>In jacks (3).</b> Laptop cables plug in here.</li>
+<li><b>Relays.</b> 3 modules, 8 relays each. Every wire goes through one. Switch it and that wire is cut.</li>
+<li><b>Out jacks (3).</b> Cables to the switch.</li>
+<li><b>ESP32.</b> Runs the Wi-Fi and web page and controls the relays. Network data never goes through it.</li>
+<li><b>I/O expanders (2).</b> Let two ESP32 pins run all 24 relays and 6 LEDs.</li>
+<li><b>OLED.</b> Shows which laptop is cut and the fault.</li>
+<li><b>LEDs (3 red, 3 green).</b> Show which cable is cut.</li>
+<li><b>Power (5 V, 3 A).</b> Runs the ESP32 and relays.</li>
+</ol>
+<p class="note">Blue or red lines cable (red when cut). Orange control wires. Black power. Orange relays are on, so that cable is open.</p>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -87,13 +113,67 @@ function laptop(x,z,idx){
 laptop(-5.4,-2.4,0);laptop(-5.4,0,1);laptop(-5.4,2.4,2);
 
 // fault injection box
-box(3,1.2,1.9,0x0F6E56,0,0.6,0);
-box(3.04,0.08,1.94,0x1D9E75,0,1.22,0);
+var AMBER=0xEF9F27,RELAYC=0x2a6fbf,GON=0x97C459,GOFF=0x2f3d1c,RON=0xE24B4A,ROFF=0x4a2020;
+var encBody=box(3,1.2,1.9,0x0F6E56,0,0.6,0);
+var encLid=box(3.04,0.08,1.94,0x1D9E75,0,1.22,0);
+var encMats=[encBody.material,encLid.material];
+encMats.forEach(function(m){m.transparent=true;});
+var edges=new THREE.Group();edges.visible=false;root.add(edges);
+[encBody,encLid].forEach(function(m){var e=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),new THREE.LineBasicMaterial({color:0x0b4f3d}));e.position.copy(m.position);edges.add(e);});
 box(0.9,0.03,0.45,0x1a1a1a,-0.7,1.28,0.45);
-var leds=[],ledX=[-0.9,0,0.9];
-for(var i=0;i<3;i++){var lm=new THREE.MeshBasicMaterial({color:GREEN});var l=new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16),lm);l.position.set(ledX[i],1.3,-0.6);root.add(l);leds.push(lm);}
+var oled=makeTex(128,64,function(c,w,h,sel){
+  c.fillStyle='#06121f';c.fillRect(0,0,w,h);
+  c.fillStyle='#7fd0ff';c.font='bold 22px monospace';c.fillText(sel>=0?'Laptop '+(sel+1):'All links',8,28);
+  c.font='bold 18px monospace';c.fillText(sel>=0?'Full cut':'normal',8,54);
+});
+var oledMesh=new THREE.Mesh(new THREE.PlaneGeometry(0.8,0.38),new THREE.MeshBasicMaterial({map:oled.tex}));
+oledMesh.rotation.x=-Math.PI/2;oledMesh.position.set(-0.7,1.3,0.45);root.add(oledMesh);
+var ledG=[],ledR=[],ledX=[-0.9,0,0.9];
+for(var i=0;i<3;i++){
+  var gm=new THREE.MeshBasicMaterial({color:GON}),rm=new THREE.MeshBasicMaterial({color:ROFF});
+  var g1=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16),gm);g1.position.set(ledX[i]-0.13,1.3,-0.6);root.add(g1);
+  var r1=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16),rm);r1.position.set(ledX[i]+0.13,1.3,-0.6);root.add(r1);
+  ledG.push(gm);ledR.push(rm);
+}
 var jz=[-0.6,0,0.6];
 for(var j=0;j<3;j++){box(0.22,0.28,0.3,0x1a1a1a,-1.6,0.6,jz[j]);box(0.22,0.28,0.3,0x1a1a1a,1.6,0.6,jz[j]);}
+
+// parts inside the box
+var inside=new THREE.Group();inside.visible=false;root.add(inside);
+function ibox(w,h,d,c,x,y,z){return box(w,h,d,c,x,y,z,inside);}
+function wire(pts,color,r){
+  var curve=new THREE.CatmullRomCurve3(pts.map(function(p){return new THREE.Vector3(p[0],p[1],p[2]);}));
+  var m=new THREE.Mesh(new THREE.TubeGeometry(curve,24,r||0.022,6,false),new THREE.MeshBasicMaterial({color:color}));
+  inside.add(m);return m;
+}
+var relayBlocks=[],inPath=[],outPath=[];
+for(var k0=0;k0<3;k0++){
+  ibox(1.0,0.04,0.4,0x14532d,-0.7,0.1,jz[k0]);
+  var rb=[];
+  for(var r=0;r<8;r++){rb.push(ibox(0.1,0.13,0.15,RELAYC,-1.12+r*0.115,0.185,jz[k0]));}
+  relayBlocks.push(rb);
+  inPath.push(wire([[-1.5,0.6,jz[k0]],[-1.35,0.4,jz[k0]],[-1.2,0.22,jz[k0]]],BLUE,0.03));
+  outPath.push(wire([[-0.2,0.22,jz[k0]],[0.5,0.45,jz[k0]],[1.1,0.58,jz[k0]],[1.5,0.6,jz[k0]]],BLUE,0.03));
+}
+// ESP32
+ibox(0.8,0.05,0.38,0x111827,0.8,0.14,-0.55);
+ibox(0.3,0.05,0.26,0xc9c9c4,0.65,0.19,-0.55);
+ibox(0.08,0.06,0.12,0x9a9a95,1.22,0.17,-0.55);
+// IO expanders
+ibox(0.95,0.03,0.42,0x14532d,0.8,0.09,0.1);
+ibox(0.28,0.06,0.12,0x1a1a1a,0.55,0.15,0.1);
+ibox(0.28,0.06,0.12,0x1a1a1a,1.05,0.15,0.1);
+// DC power input
+ibox(0.2,0.16,0.14,0x1a1a1a,0.3,0.2,-0.88);
+var barrel=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.12,12),mat(0x333333));
+barrel.rotation.x=Math.PI/2;barrel.position.set(0.3,0.2,-0.97);inside.add(barrel);
+//  (black)
+wire([[0.3,0.2,-0.8],[0.35,0.22,-0.68],[0.42,0.19,-0.55]],0x222222,0.02);
+wire([[0.3,0.2,-0.82],[0.05,0.15,-0.8],[-0.25,0.15,-0.62]],0x222222,0.02);
+// (amber)
+wire([[0.7,0.17,-0.4],[0.62,0.15,-0.15],[0.55,0.17,0.04]],AMBER,0.018);
+wire([[0.9,0.17,-0.4],[0.95,0.15,-0.15],[1.05,0.17,0.04]],AMBER,0.018);
+for(var k1=0;k1<3;k1++){wire([[0.45,0.16,0.1],[0.1,0.18,(0.1+jz[k1])/2],[-0.2,0.2,jz[k1]]],AMBER,0.018);}
 
 // switch
 box(2.2,0.5,1.5,0x444441,5.1,0.25,0);
@@ -136,6 +216,18 @@ anchor(0,2.1,0,'Fault injection box');
 anchor(5.1,1.0,0,'Switch');
 anchor(0,2.6,3.7,'Phone');
 
+// numbered badges for x-ray
+var badges=[];
+function badge(x,y,z,n){var o=new THREE.Object3D();o.position.set(x,y,z);root.add(o);var el=document.createElement('div');el.textContent=n;el.style.cssText='position:absolute;left:0;top:0;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#111;color:#fff;font-size:12px;font-weight:bold;display:none;';labelsEl.appendChild(el);badges.push({o:o,el:el});}
+badge(-1.85,0.95,0,1);
+badge(-0.7,0.5,0,2);
+badge(1.85,0.95,0,3);
+badge(0.8,0.4,-0.55,4);
+badge(0.8,0.4,0.1,5);
+badge(-0.7,1.55,0.45,6);
+badge(0,1.6,-0.6,7);
+badge(0.3,0.55,-0.9,8);
+
 // state
 var cut=1;
 var btns=document.querySelectorAll('#controls button');
@@ -144,15 +236,30 @@ function apply(){
     var bad=(i===cut);
     cablesIn[i].material.color.setHex(bad?RED:BLUE);
     cablesOut[i].material.color.setHex(bad?RED:BLUE);
-    leds[i].color.setHex(bad?RED:GREEN);
+    ledG[i].color.setHex(bad?GOFF:GON);
+    ledR[i].color.setHex(bad?RON:ROFF);
+    inPath[i].material.color.setHex(bad?RED:BLUE);
+    outPath[i].material.color.setHex(bad?RED:BLUE);
+    for(var rr=0;rr<relayBlocks[i].length;rr++){relayBlocks[i][rr].material.color.setHex(bad?AMBER:RELAYC);}
     laptops[i].screen.redraw(bad);
     lapLabels[i].el.textContent='Laptop '+(i+1)+(bad?' (cut)':'');
   }
   phoneTex.redraw(cut);
+  oled.redraw(cut);
   for(var b=0;b<btns.length;b++){btns[b].setAttribute('aria-pressed',String(parseInt(btns[b].getAttribute('data-i'),10)===cut));}
 }
 for(var bi=0;bi<btns.length;bi++){btns[bi].addEventListener('click',function(){cut=parseInt(this.getAttribute('data-i'),10);apply();});}
 apply();
+
+// x-ray
+var xrayOn=false,xrayT=0,autoPitch=null;
+var xbtn=document.getElementById('xray'),insideEl=document.getElementById('inside');
+xbtn.addEventListener('click',function(){
+  xrayOn=!xrayOn;
+  xbtn.setAttribute('aria-pressed',String(xrayOn));
+  insideEl.hidden=!xrayOn;
+  autoPitch=xrayOn?0.4:0;
+});
 
 // view
 var yaw=-0.45,pitch=0,dragging=false,touched=false,lx=0,ly=0,sx=0,sy=0,dist=15.5,w=680,h=430;
@@ -172,26 +279,59 @@ function pick(e){
   while(o&&o.userData.idx===undefined)o=o.parent;
   if(o){var n=o.userData.idx;cut=(cut===n)?-1:n;apply();}
 }
-wrap.addEventListener('pointerdown',function(e){dragging=true;touched=true;lx=sx=e.clientX;ly=sy=e.clientY;wrap.style.cursor='grabbing';try{wrap.setPointerCapture(e.pointerId);}catch(err){}});
-wrap.addEventListener('pointermove',function(e){if(!dragging)return;yaw+=(e.clientX-lx)*0.008;pitch=Math.max(-0.25,Math.min(0.45,pitch+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
-wrap.addEventListener('pointerup',function(e){
-  var moved=Math.abs(e.clientX-sx)+Math.abs(e.clientY-sy);
-  dragging=false;wrap.style.cursor='grab';
-  if(moved<6)pick(e);
+var zoom=1,zoomT=1;
+function setZoom(z){zoomT=Math.max(0.4,Math.min(1.6,z));}
+document.getElementById('zin').addEventListener('click',function(){setZoom(zoomT*0.8);});
+document.getElementById('zout').addEventListener('click',function(){setZoom(zoomT*1.25);});
+wrap.addEventListener('wheel',function(e){e.preventDefault();setZoom(zoomT*(e.deltaY>0?1.1:0.9));},{passive:false});
+var ptrs={},pinch=0,multi=false;
+function ptrCount(){return Object.keys(ptrs).length;}
+function ptrDist(){var k=Object.keys(ptrs),a=ptrs[k[0]],b=ptrs[k[1]];return Math.sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y));}
+wrap.addEventListener('pointerdown',function(e){
+  ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
+  try{wrap.setPointerCapture(e.pointerId);}catch(err){}
+  if(ptrCount()>=2){multi=true;dragging=false;pinch=ptrDist();return;}
+  autoPitch=null;dragging=true;touched=true;lx=sx=e.clientX;ly=sy=e.clientY;wrap.style.cursor='grabbing';
 });
-wrap.addEventListener('pointercancel',function(){dragging=false;wrap.style.cursor='grab';});
+wrap.addEventListener('pointermove',function(e){
+  if(!ptrs[e.pointerId])return;
+  ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
+  if(ptrCount()>=2){var d=ptrDist();if(pinch>0&&d>0)setZoom(zoomT*pinch/d);pinch=d;return;}
+  if(!dragging)return;
+  yaw+=(e.clientX-lx)*0.008;pitch=Math.max(-0.25,Math.min(0.45,pitch+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;
+});
+function endPtr(e,allowPick){
+  if(!ptrs[e.pointerId])return;
+  delete ptrs[e.pointerId];
+  if(ptrCount()<2)pinch=0;
+  var moved=Math.abs(e.clientX-sx)+Math.abs(e.clientY-sy);
+  var wasDrag=dragging;
+  dragging=false;wrap.style.cursor='grab';
+  if(ptrCount()===0){var m=multi;multi=false;if(allowPick&&wasDrag&&!m&&moved<6)pick(e);}
+}
+wrap.addEventListener('pointerup',function(e){endPtr(e,true);});
+wrap.addEventListener('pointercancel',function(e){endPtr(e,false);});
 
 var v=new THREE.Vector3();
 function frame(t){
   var s=t/1000;
   root.rotation.y=touched?yaw:yaw+Math.sin(s*0.5)*0.3;
+  var tgt=xrayOn?1:0;xrayT+=(tgt-xrayT)*0.12;if(Math.abs(tgt-xrayT)<0.004)xrayT=tgt;
+  for(var m=0;m<encMats.length;m++){encMats[m].opacity=1-0.88*xrayT;encMats[m].depthWrite=xrayT<0.02;}
+  inside.visible=xrayT>0.05;edges.visible=xrayT>0.05;
+  if(autoPitch!==null&&!dragging){pitch+=(autoPitch-pitch)*0.08;if(Math.abs(autoPitch-pitch)<0.004){pitch=autoPitch;autoPitch=null;}}
   root.rotation.x=pitch;
-  camera.position.set(0,dist*0.42,dist*0.9);camera.lookAt(0,0.4,0);
+  zoom+=(zoomT-zoom)*0.18;camera.position.set(0,dist*zoom*0.42,dist*zoom*0.9);camera.lookAt(0,0.4,0);
   renderer.render(scene,camera);
   for(var i=0;i<labels.length;i++){
     v.setFromMatrixPosition(labels[i].o.matrixWorld);v.project(camera);
     var px=(v.x*0.5+0.5)*w,py=(-v.y*0.5+0.5)*h;
     labels[i].el.style.transform='translate('+Math.round(px)+'px,'+Math.round(py)+'px) translate(-50%,-100%)';
+  }
+  for(var b=0;b<badges.length;b++){
+    var on=xrayT>0.6;badges[b].el.style.display=on?'block':'none';
+    if(on){v.setFromMatrixPosition(badges[b].o.matrixWorld);v.project(camera);
+      badges[b].el.style.transform='translate('+Math.round((v.x*0.5+0.5)*w)+'px,'+Math.round((-v.y*0.5+0.5)*h)+'px) translate(-50%,-50%)';}
   }
   requestAnimationFrame(frame);
 }
